@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>巨人企業×国内銘柄 提携ニュースログ</title>
+<style>
+  body {
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px;
+    background: #f5f5f5;
+    color: #222;
+  }
+  h1 { font-size: 1.3em; margin-bottom: 4px; }
+  p.sub { color: #666; font-size: 0.85em; margin-top: 0; }
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  label { display: block; font-weight: bold; margin-top: 12px; font-size: 0.9em; }
+  input, select, textarea {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1em;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 16px;
+    padding: 12px 20px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: bold;
+    width: 100%;
+  }
+  button.secondary {
+    background: #16a34a;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8em;
+    margin-top: 8px;
+  }
+  th, td {
+    border-bottom: 1px solid #eee;
+    padding: 6px 4px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f0f4ff; }
+  .tier-A { color: #b91c1c; font-weight: bold; }
+  .tier-B { color: #b45309; }
+  .tier-C { color: #6b7280; }
+  #status { margin-top: 8px; font-size: 0.85em; }
+  .small-link { font-size: 0.8em; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<h1>巨人企業×国内銘柄 提携ニュースログ</h1>
+<p class="sub">即応連動システム 第5トラック（フィジカルAI監視）用 検知ログ蓄積ツール</p>
+
+<div class="card">
+  <form id="logForm">
+    <label>発表日</label>
+    <input type="date" id="announce_date" required>
+
+    <label>巨人企業（複数の場合はセミコロン区切り）</label>
+    <input type="text" id="giant" placeholder="例: NVIDIA;富士通" required>
+
+    <label>国内銘柄名</label>
+    <input type="text" id="japan_company" placeholder="例: 安川電機" required>
+
+    <label>銘柄コード（yfinance形式）</label>
+    <input type="text" id="ticker" placeholder="例: 6506.T" required>
+
+    <label>判定（Tier）</label>
+    <select id="status">
+      <option value="確定候補">確定候補（Tier A: 業務提携/協業/共同開発など）</option>
+      <option value="要レビュー">要レビュー（Tier B: 連携/協力など弱い表現）</option>
+      <option value="対象外">対象外（検討・出展のみ等）</option>
+    </select>
+
+    <label>見出し</label>
+    <textarea id="headline" rows="2" placeholder="例: NVIDIA、富士通・安川電機とAIロボット基盤協業"></textarea>
+
+    <label>ソースURL</label>
+    <input type="url" id="source_url" placeholder="https://...">
+
+    <button type="submit">記録する</button>
+  </form>
+  <div id="status"></div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1.05em; margin-top:0;">記録済みログ一覧</h2>
+  <button class="secondary" id="downloadCsv">CSVダウンロード（giant_news_bt.py用）</button>
+  <div style="overflow-x:auto;">
+    <table id="logTable">
+      <thead>
+        <tr>
+          <th>発表日</th><th>巨人</th><th>銘柄</th><th>コード</th><th>判定</th><th>見出し</th><th>URL</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_BASE = ""; // 同一オリジンのAPIを使う
+
+async function fetchLogs() {
+  const res = await fetch(API_BASE + "/api/logs");
+  const data = await res.json();
+  renderTable(data.logs || []);
+  // ローカルにも退避（Render再起動対策）
+  localStorage.setItem("giant_news_logs_cache", JSON.stringify(data.logs || []));
+}
+
+function renderTable(logs) {
+  const tbody = document.querySelector("#logTable tbody");
+  tbody.innerHTML = "";
+  logs.slice().reverse().forEach(row => {
+    const tr = document.createElement("tr");
+    const tierClass = row.status === "確定候補" ? "tier-A" : (row.status === "要レビュー" ? "tier-B" : "tier-C");
+    tr.innerHTML = `
+      <td>${row.announce_date || ""}</td>
+      <td>${row.giant || ""}</td>
+      <td>${row.japan_company || ""}</td>
+      <td>${row.ticker || ""}</td>
+      <td class="${tierClass}">${row.status || ""}</td>
+      <td>${row.headline || ""}</td>
+      <td class="small-link">${row.source_url ? `<a href="${row.source_url}" target="_blank">link</a>` : ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("logForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    announce_date: document.getElementById("announce_date").value,
+    giant: document.getElementById("giant").value,
+    japan_company: document.getElementById("japan_company").value,
+    ticker: document.getElementById("ticker").value,
+    status: document.getElementById("status").value,
+    headline: document.getElementById("headline").value,
+    source_url: document.getElementById("source_url").value,
+  };
+
+  const statusEl = document.getElementById("status");
+  try {
+    const res = await fetch(API_BASE + "/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error("送信失敗: " + res.status);
+    statusEl.textContent = "記録しました。";
+    statusEl.style.color = "green";
+    document.getElementById("logForm").reset();
+    fetchLogs();
+  } catch (err) {
+    statusEl.textContent = "エラー: " + err.message + "（ローカルに一時保存しました）";
+    statusEl.style.color = "red";
+    // サーバー側がダウンしている場合のフォールバック保存
+    const pending = JSON.parse(localStorage.getItem("giant_news_logs_pending") || "[]");
+    pending.push(payload);
+    localStorage.setItem("giant_news_logs_pending", JSON.stringify(pending));
+  }
+});
+
+document.getElementById("downloadCsv").addEventListener("click", async () => {
+  window.location.href = API_BASE + "/api/logs/csv";
+});
+
+// 起動時に未送信データがあれば再送を試みる
+async function retryPending() {
+  const pending = JSON.parse(localStorage.getItem("giant_news_logs_pending") || "[]");
+  if (pending.length === 0) return;
+  const remaining = [];
+  for (const payload of pending) {
+    try {
+      const res = await fetch(API_BASE + "/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      remaining.push(payload);
+    }
+  }
+  localStorage.setItem("giant_news_logs_pending", JSON.stringify(remaining));
+}
+
+retryPending().then(fetchLogs);
+</script>
+
+</body>
+</html>
